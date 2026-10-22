@@ -1,0 +1,7 @@
+﻿# Publicação estática: somente arquivos essenciais do dashboard
+/*
+!/index.html
+!/app.js
+!/styles.css
+!/README.md
+!/.gitignore
