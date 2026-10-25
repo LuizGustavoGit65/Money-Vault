@@ -3507,3 +3507,40 @@ body { overflow-x: hidden; }
 .table-panel table { font-size: 13px; }
 .table-empty, .filter-btn, .sidebar-user-meta, .app-footer, .text-button { font-size: 12px; }
 @media (max-width: 640px) { .table-scroll { width: calc(100% + 28px); max-width: calc(100% + 28px); } }
+
+/* ====================================================
+   Motion — indicador deslizante da navegação
+   ==================================================== */
+
+.main-nav {
+  position: relative;
+}
+
+.nav-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-subtle);
+  box-shadow: inset 0 0 0 1px rgba(183, 227, 107, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+body.has-nav-indicator .nav-indicator {
+  opacity: 1;
+}
+
+body.has-nav-indicator .main-nav .nav-link {
+  position: relative;
+  z-index: 1;
+}
+
+body.has-nav-indicator .main-nav .nav-link.is-active,
+body.has-nav-indicator .main-nav .nav-link.is-active:hover {
+  background-color: transparent;
+}

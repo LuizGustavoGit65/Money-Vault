@@ -887,6 +887,178 @@
     else if (view === 'goals') buildGoalsView();
     else if (view === 'reports') buildReportsView();
     else buildOverview();
+
+    syncNavIndicator();
+  }
+
+  // ==========================================================
+  // MOTION — entrada em cascata e indicador da navegação
+  // ==========================================================
+  const ENTRANCE = { duration: 400, step: 55, distance: 12, maxSteps: 7 };
+  const ENTRANCE_GROUPS = ['kpi-grid', 'budget-view-grid', 'goal-view-grid', 'transaction-list-container'];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const navRoot = document.querySelector('.main-nav');
+  const viewContainer = document.querySelector('#view-container');
+
+  let entranceAnimations = [];
+  let entranceRun = 0;
+  let navIndicator = null;
+  let navIndicatorBox = null;
+  let navIndicatorAnimation = null;
+
+  // Agrupa os blocos na ordem de leitura: toolbar, cards/linhas, painéis e rodapé.
+  function entranceBlocks() {
+    const blocks = [];
+    const add = (element) => {
+      if (element && !blocks.includes(element)) blocks.push(element);
+    };
+    const addExpanded = (element) => {
+      const expand = ENTRANCE_GROUPS.some((name) => element.classList.contains(name));
+      if (expand && element.children.length) [...element.children].forEach(add);
+      else add(element);
+    };
+
+    if (!viewContainer) return blocks;
+
+    const scope = viewContainer.querySelector('.overview-layout, .report-grid');
+    if (scope) {
+      [...scope.children].forEach(addExpanded);
+      return blocks;
+    }
+
+    const glass = viewContainer.querySelector('.view-panel-glass');
+    if (glass) {
+      [...glass.children].forEach(addExpanded);
+      return blocks;
+    }
+
+    [...viewContainer.children].forEach(add);
+    return blocks;
+  }
+
+  function playViewEntrance() {
+    entranceAnimations.forEach((animation) => animation.cancel());
+    entranceAnimations = [];
+
+    if (reducedMotion.matches) return;
+
+    const blocks = entranceBlocks();
+    if (!blocks.length) return;
+
+    const { duration, step, distance, maxSteps } = ENTRANCE;
+    const run = ++entranceRun;
+
+    blocks.forEach((block) => {
+      block.style.opacity = '0';
+      block.style.transform = `translateY(${distance}px)`;
+      block.style.willChange = 'opacity, transform';
+    });
+
+    const animations = blocks.map((block, index) => block.animate(
+      [
+        { opacity: 0, transform: `translateY(${distance}px)` },
+        { opacity: 1, transform: 'none' }
+      ],
+      {
+        duration,
+        delay: Math.min(index, maxSteps) * step,
+        easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+        fill: 'both'
+      }
+    ));
+
+    entranceAnimations = animations;
+
+    Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+      if (run !== entranceRun) return;
+      animations.forEach((animation) => animation.cancel());
+      blocks.forEach((block) => {
+        block.style.removeProperty('opacity');
+        block.style.removeProperty('transform');
+        block.style.removeProperty('will-change');
+      });
+    });
+  }
+
+  function placeNavIndicator(box) {
+    navIndicator.style.width = `${box.width}px`;
+    navIndicator.style.height = `${box.height}px`;
+    navIndicator.style.transform = `translate(${box.x}px, ${box.y}px)`;
+  }
+
+  function measureNavIndicator() {
+    if (!navIndicator) return null;
+
+    const active = navRoot.querySelector('.nav-link.is-active');
+    if (!active) return null;
+
+    const box = active.getBoundingClientRect();
+    if (box.width < 1 || box.height < 1) return null;
+
+    const base = navRoot.getBoundingClientRect();
+    return { x: box.left - base.left, y: box.top - base.top, width: box.width, height: box.height };
+  }
+
+  function syncNavIndicator(animate = true) {
+    if (!navIndicator) return;
+
+    const box = measureNavIndicator();
+
+    if (!box) {
+      navIndicatorBox = null;
+      navIndicator.style.visibility = 'hidden';
+      if (navIndicatorAnimation) {
+        navIndicatorAnimation.cancel();
+        navIndicatorAnimation = null;
+      }
+      return;
+    }
+
+    navIndicator.style.visibility = '';
+
+    const previous = navIndicatorBox;
+    navIndicatorBox = box;
+    placeNavIndicator(box);
+
+    if (navIndicatorAnimation) {
+      navIndicatorAnimation.cancel();
+      navIndicatorAnimation = null;
+    }
+
+    const moved = previous && (previous.x !== box.x || previous.y !== box.y);
+    if (!animate || !moved || reducedMotion.matches) return;
+
+    navIndicatorAnimation = navIndicator.animate(
+      [
+        { transform: `translate(${previous.x}px, ${previous.y}px)` },
+        { transform: `translate(${box.x}px, ${box.y}px)` }
+      ],
+      { duration: 280, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' }
+    );
+  }
+
+  function initNavIndicator() {
+    if (!navRoot || !viewContainer) return;
+
+    navIndicator = document.createElement('span');
+    navIndicator.className = 'nav-indicator';
+    navIndicator.setAttribute('aria-hidden', 'true');
+    navRoot.prepend(navIndicator);
+
+    const applyMotionPreference = () => {
+      const enabled = !reducedMotion.matches;
+      document.body.classList.toggle('has-nav-indicator', enabled);
+      if (enabled) syncNavIndicator(false);
+    };
+
+    reducedMotion.addEventListener('change', applyMotionPreference);
+    applyMotionPreference();
+
+    window.addEventListener('resize', () => syncNavIndicator(false));
+
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => syncNavIndicator(false)).observe(navRoot);
+    }
   }
 
   function setView(nextView, options = {}) {
@@ -906,6 +1078,7 @@
     }
     if (!options.keepFilters) categoryFilter = 'all';
     render();
+    playViewEntrance();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1173,7 +1346,9 @@
 
   populateMonths();
   bindGlobalEvents();
+  initNavIndicator();
   render();
+  playViewEntrance();
   syncTransactions();
   window.setInterval(syncTransactions, 5000);
 })();
